@@ -53,7 +53,16 @@ type Token =
             | "<-" -> FUNCTION
             | x -> ID x
 
- 
+let matchToken (theExpectedToken: Token) theList =
+    match theList with
+    // resolve to the rest of the list when head is the expected type.
+    | head :: tail when head = theExpectedToken -> tail
+
+    // head of list did not match the expected type, so we don't even care about "the rest" (_)
+    | head :: _ -> failwithf $"Wrong Type! Expected %A{theExpectedToken} but found %A{head}"
+
+    // Couldn't match anything!
+    | _ -> failwithf $"Nothing to match! Expected a list with a head of type %A{theExpectedToken}"
 
 let degugDisplay msg list = 
     printfn $"{msg}\n\tRemaining List is: %A{list}\n"
@@ -68,7 +77,7 @@ let rec parse xs =
 
 // <program> ::= <stmt_list> $$
 and program xs = 
-    xs |> read_stmnt |> degugDisplay "Program"|> ``$$``
+    xs |> stmt_list |> degugDisplay "Program"|> ``$$``
 
 
 // As "$$" means "Top of Stack", this represents an "Empty List"
@@ -78,19 +87,141 @@ and ``$$`` =
     | [] -> printfn "Top Of Stack!"; ([] : Token list)
     | reminingElements -> failwithf $"Unprocessed Tokens: {reminingElements}"
 
+//<stmt_list> ::= <stmt> <stmt_list> | ε
+and stmt_list lst =
+    match lst with
+    _ -> lst |> stmt |> stmt_list 
+   | x -> x
+
+// and stmt lst = 
+//     match lst with
+//     | ID _:: xs -> xs |> id_tail
+//     |> io_stmnt |> if_stmt |> do_stmt |> while_stmt
+
+//<stmt> ::= ID <id_tail> | <io_stmt> | <if_stmt> | <do_stmt> | <while_stmt>
+and stmt xs =
+    match xs with
+    | Token.ID _ :: remaining -> remaining |> id_tail
+    | Token.READ :: Token.ID _ :: remaining -> remaining
+    | Token.WRITE :: remaining -> remaining |> expr
+    | Token.IF :: remaining -> remaining |> if_stmt
+    | Token.DO :: remaining -> remaining |> do_stmt
+    | Token.WHILE :: remaining -> remaining |> while_stmt
+    | _ -> failwithf $"Invalid statement: {xs}"
+
+//<id_tail> ::= <fun_call> | <assignment>
+and id_tail xs =
+    match xs with
+    | Token.FUNCTION :: Token.ID _ :: Token.PARENTH :: remaining -> remaining |> param_list |> id_tail
+    | Token.ASGN :: remaining -> remaining |> expr
+    | _ -> xs
+
+//<expr> ::= ID <expr_tail> | ( <expr> ) <expr_tail>
+and expr xs =
+    match xs with
+    | Token.ID _ :: remaining -> remaining |> expr_tail
+    | Token.PARENTH :: remaining ->
+        match remaining |> expr with
+        | exprTail -> exprTail
+        | _ -> failwithf $"Invalid expression after opening parenthesis: {remaining}"
+    | _ -> failwithf $"Invalid expression: {xs}"
+
+//<expr_tail> ::= <arith_op> <expr> | ε
+and expr_tail xs =
+    match xs with
+    | Token.ADD :: remaining | Token.MULTIPLY :: remaining ->
+        match remaining |> expr with
+        | exprTail -> exprTail |> expr_tail
+        | _ -> failwithf $"Invalid expression after operator: {remaining}"
+    | Token.PARENTH :: remaining -> remaining |> expr_tail
+    | _ -> xs
+
+//<param_list> ::= <expr> <param_tail>
+and param_list xs =
+    match xs with
+    | Token.PARENTH :: remaining -> remaining
+    | _ -> xs |> expr |> param_tail
+
+//<param_tail> ::= , <expr> <param_tail> | ε
+and param_tail xs =
+    match xs with
+    | Token.COMMA :: remaining -> remaining |> expr |> param_tail
+    | _ -> xs
+
+//<if_stmt> ::= IF <cond> THEN <stmt_list> <else_stmt>
+and if_stmt  =
+    function
+    | IF :: xs -> xs |> cond_expr|> matchToken THEN |> stmt_list |> else_stmt
+    | x :: xs -> failwithf $"Invalid if statement: {xs}"
+    | [] -> failwith "Statement should not be empty"
+
+//<cond_expr> ::= <expr> <rel_oper> <expr>
+and cond_expr xs =
+    match xs with
+    | Token.ID _ :: remaining -> remaining |> rel_op
+    | Token.PARENTH :: remaining ->
+        match remaining |> expr with
+        | exprTail -> exprTail |> rel_op
+        | _ -> failwithf $"Invalid conditional expression after opening parenthesis: {remaining}"
+    | _ -> failwithf $"Invalid conditional expression: {xs}"
+
+//<else_stmt> ::= ELSE <stmt_list> ENDIF | ENDIF
+and else_stmt xs =
+    match xs with
+    | Token.ELSE :: remaining ->
+        remaining
+        |> stmt_list
+        |> (function Token.ENDIF :: rest -> rest | Token.IF :: rest -> rest |> else_stmt | _ -> failwith "Expected ENDIF")
+    | Token.ENDIF :: remaining -> remaining
+    | _ -> failwithf $"Invalid else statement: {xs}"
+
+//<rel_oper> ::= > | < | ==
+and rel_op xs =
+    match xs with
+    | COND :: xs -> xs
+    | _ -> failwithf $"Invalid relational operator: {xs}"
+
+//<while_stmt> ::= WHILE <cond> DO <stmt_list> DONE
+and while_stmt xs =
+    match xs with
+    | Token.WHILE :: remaining -> 
+        remaining 
+        |> cond_expr
+        |> (function Token.DO :: rest -> rest | _ -> failwith "Expected DO")
+        |> stmt_list 
+        |> (function Token.DONE :: rest -> rest | _ -> failwith "Expected DONE")
+    
+
+//<do_stmt> ::= DO <stmt_list> until <cond>
+and do_stmt xs =
+    match xs with
+    | Token.DO :: remaining -> remaining |> stmt_list |> (function Token.DONE :: rest -> rest | _ -> failwith "Expected DONE")
+    | _ -> failwithf $"Invalid do statement: {xs}"
+
+//<read_stmt> ::= READ ID
 and read_stmnt lst = 
     match lst with
     | READ :: ID _ :: xs -> xs 
     | _ -> failwithf $"Not a valid statement: {lst}" // no empty case allowed
-    
+
+//<write_stmt> ::= WRITE <expr>
 and write_stmnt lst = 
     match lst with
     | WRITE :: xs   -> xs |> expr
+    | _ -> failwithf $"Not a valid statement: {lst}"
 
-and expr lst =
-    match lst with
-    | 
+//<io_stmt> ::= <read_stmt> | <write_stmt>
+and io_stmnt xs =
+    match xs with
+    |_ -> xs |> read_stmnt |> write_stmnt
+    |_ -> failwithf $"Not a valid statement: {xs}"
 
+//<arith_op> ::= - | + | * | /
+and arith_op xs =
+    match xs with
+    | ADD :: xs -> xs
+    | MULTIPLY :: xs -> xs
+    | _ -> failwithf $"Invalid arithmetic operator: {xs}"
 
 
 
@@ -135,11 +266,11 @@ let main () =
                 printfn $"Parsing Failed becuase we have extra tokens! %A{parsedList}"
                 printfn $"Extra Tokens:\t%A{parsedList}"
             else
-                printfn "Done!"
+                printfn $"The Sentence %s{str} follows the grammar"
 
         // If an exception ("failwith") is thrown, display the error message.
         with Failure msg ->
-            printfn $"Error: %s{msg}"
+            printfn $"The Sentence %s{str} is incorrect because it is: %s{msg}"
 
     // Get the user input and start parsing
     let getUserInput () =
@@ -154,11 +285,6 @@ let main () =
         startParsing |>
         ignore  // Just ignore the result, as we are just printing results above.
 
-
-
-(* EXAMPLE TEST DATA
-    the small , slow dog quietly chases the fast cat up a tall tree .
-*)
 
 // Execute the main function!
 main ()
