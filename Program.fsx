@@ -29,29 +29,45 @@ type Token =
     | WRITE
     | COMMA
     | FUNCTION
-    | ASGN | IF | THEN | ELSE | ENDIF | WHILE | DO | DONE | COND | PARENTH | ADD | MULTIPLY 
+    | ASGN
+    | IF
+    | THEN
+    | ELSE
+    | ENDIF
+    | WHILE
+    | DO
+    | DONE
+    | COND
+    | PARENTH
+    | ADD
+    | MULTIPLY
     | ID of string
 
     // Member (of the type) function to get a token from a lexeme (String)
     static member tokenFromLexeme str =
-        match str with 
-            |"read" -> READ
-            | "write" -> WRITE
-            | ":=" -> ASGN
-            | "+" | "-" -> ADD
-            | "*" | "/" -> MULTIPLY
-            | ">" | "<" | "==" -> COND
-            | "(" | ")" -> PARENTH
-            | "if" -> IF
-            | "then" -> THEN
-            | "else" -> ELSE
-            | "endif" -> ENDIF
-            | "while" -> WHILE
-            | "do" -> DO
-            | "done" -> DONE
-            | "," -> COMMA
-            | "<-" -> FUNCTION
-            | x -> ID x
+        match str with
+        | "read" -> READ
+        | "write" -> WRITE
+        | ":=" -> ASGN
+        | "+"
+        | "-" -> ADD
+        | "*"
+        | "/" -> MULTIPLY
+        | ">"
+        | "<"
+        | "==" -> COND
+        | "("
+        | ")" -> PARENTH
+        | "if" -> IF
+        | "then" -> THEN
+        | "else" -> ELSE
+        | "endif" -> ENDIF
+        | "while" -> WHILE
+        | "do" -> DO
+        | "done" -> DONE
+        | "," -> COMMA
+        | "<-" -> FUNCTION
+        | x -> ID x
 
 let matchToken (theExpectedToken: Token) theList =
     match theList with
@@ -64,36 +80,37 @@ let matchToken (theExpectedToken: Token) theList =
     // Couldn't match anything!
     | _ -> failwithf $"Nothing to match! Expected a list with a head of type %A{theExpectedToken}"
 
-let degugDisplay msg list = 
+let degugDisplay msg list =
     printfn $"{msg}\n\tRemaining List is: %A{list}\n"
     list
 
 
 // NOTE: The |> operator sends (pipes) the output of one function directly to the next one in line.
 // "and" just allows multiple, mutually recursive functions to be defined under a single "let"
-let rec parse xs = 
-    xs |> program
+let rec parse xs = xs |> program
 
 
 // <program> ::= <stmt_list> $$
-and program xs = 
-    xs |> stmt_list |> degugDisplay "Program"|> ``$$``
+and program xs =
+    xs |> stmt_list |> degugDisplay "Program" |> ``$$``
 
 
 // As "$$" means "Top of Stack", this represents an "Empty List"
 // Functions can be named virtually anything if in backticks.  This is a good way to name a function with a symbol.
 and ``$$`` =
     function
-    | [] -> printfn "Top Of Stack!"; ([] : Token list)
+    | [] ->
+        printfn "Top Of Stack!"
+        ([]: Token list)
     | reminingElements -> failwithf $"Unprocessed Tokens: {reminingElements}"
 
 //<stmt_list> ::= <stmt> <stmt_list> | ε
 and stmt_list lst =
     match lst with
-    _ -> lst |> stmt |> stmt_list 
-   | x -> x
+    | (READ | WRITE | IF | DO | WHILE) :: _ -> lst |> stmt |> stmt_list
+    | x -> x
 
-// and stmt lst = 
+// and stmt lst =
 //     match lst with
 //     | ID _:: xs -> xs |> id_tail
 //     |> io_stmnt |> if_stmt |> do_stmt |> while_stmt
@@ -101,65 +118,71 @@ and stmt_list lst =
 //<stmt> ::= ID <id_tail> | <io_stmt> | <if_stmt> | <do_stmt> | <while_stmt>
 and stmt xs =
     match xs with
-    | Token.ID _ :: remaining -> remaining |> id_tail
-    | Token.READ :: Token.ID _ :: remaining -> remaining
-    | Token.WRITE :: remaining -> remaining |> expr
-    | Token.IF :: remaining -> remaining |> if_stmt
-    | Token.DO :: remaining -> remaining |> do_stmt
-    | Token.WHILE :: remaining -> remaining |> while_stmt
+    | ID _ :: remaining -> remaining |> id_tail
+    | READ :: ID _ :: remaining -> remaining
+    | WRITE :: remaining -> remaining |> expr
+    | IF :: _ -> xs |> if_stmt
+    | DO :: _ -> xs |> do_stmt
+    | WHILE :: _ -> xs |> while_stmt
     | _ -> failwithf $"Invalid statement: {xs}"
 
 //<id_tail> ::= <fun_call> | <assignment>
-and id_tail xs =
-    match xs with
-    | Token.FUNCTION :: Token.ID _ :: Token.PARENTH :: remaining -> remaining |> param_list |> id_tail
-    | Token.ASGN :: remaining -> remaining |> expr
-    | _ -> xs
+and id_tail lst = lst |> id_tail |> assignment
+
+
+//<assignment> ::= := <expr>
+and assignment lst =
+    match lst with
+    | ASGN :: xs -> xs |> expr
+    | _ -> failwithf $"Not a valid assignment statement: {lst}"
+
+
+//<fun_call> ::= <- ID ( <param_list> )
+and fun_call lst =
+    match lst with
+    | FUNCTION :: ID _ :: PARENTH :: xs -> xs |> param_list
+    | _ -> failwithf $"Not a valid fun_call statement: {lst}"
 
 //<expr> ::= ID <expr_tail> | ( <expr> ) <expr_tail>
-and expr xs =
-    match xs with
-    | Token.ID _ :: remaining -> remaining |> expr_tail
-    | Token.PARENTH :: remaining ->
-        match remaining |> expr with
-        | exprTail -> exprTail
-        | _ -> failwithf $"Invalid expression after opening parenthesis: {remaining}"
-    | _ -> failwithf $"Invalid expression: {xs}"
+and expr lst =
+    match lst with
+    | ID _ :: xs -> xs |> expr_tail
+    | PARENTH :: xs -> xs |> expr |> expr_tail
+    | _ -> failwith $"Invalid expression after opening parenthesis: {lst}"
+
 
 //<expr_tail> ::= <arith_op> <expr> | ε
 and expr_tail xs =
     match xs with
-    | Token.ADD :: remaining | Token.MULTIPLY :: remaining ->
-        match remaining |> expr with
-        | exprTail -> exprTail |> expr_tail
-        | _ -> failwithf $"Invalid expression after operator: {remaining}"
-    | Token.PARENTH :: remaining -> remaining |> expr_tail
-    | _ -> xs
+    | ADD :: remaining -> remaining |> expr
+    | MULTIPLY :: remaining -> remaining |> expr 
+    | PARENTH :: remaining -> remaining |> expr_tail
+    | _ -> failwith $"Invalid expression after opening parenthesis: {xs}"
 
 //<param_list> ::= <expr> <param_tail>
 and param_list xs =
     match xs with
-    | Token.PARENTH :: remaining -> remaining
+    | PARENTH :: remaining -> remaining
     | _ -> xs |> expr |> param_tail
 
 //<param_tail> ::= , <expr> <param_tail> | ε
 and param_tail xs =
     match xs with
-    | Token.COMMA :: remaining -> remaining |> expr |> param_tail
+    | COMMA :: remaining -> remaining |> expr |> param_tail
     | _ -> xs
 
 //<if_stmt> ::= IF <cond> THEN <stmt_list> <else_stmt>
-and if_stmt  =
+and if_stmt =
     function
-    | IF :: xs -> xs |> cond_expr|> matchToken THEN |> stmt_list |> else_stmt
+    | IF :: xs -> xs |> cond_expr |> matchToken THEN |> stmt_list |> else_stmt
     | x :: xs -> failwithf $"Invalid if statement: {xs}"
     | [] -> failwith "Statement should not be empty"
 
 //<cond_expr> ::= <expr> <rel_oper> <expr>
 and cond_expr xs =
     match xs with
-    | Token.ID _ :: remaining -> remaining |> rel_op
-    | Token.PARENTH :: remaining ->
+    | ID _ :: remaining -> remaining |> rel_op
+    | PARENTH :: remaining ->
         match remaining |> expr with
         | exprTail -> exprTail |> rel_op
         | _ -> failwithf $"Invalid conditional expression after opening parenthesis: {remaining}"
@@ -168,11 +191,14 @@ and cond_expr xs =
 //<else_stmt> ::= ELSE <stmt_list> ENDIF | ENDIF
 and else_stmt xs =
     match xs with
-    | Token.ELSE :: remaining ->
+    | ELSE :: remaining ->
         remaining
         |> stmt_list
-        |> (function Token.ENDIF :: rest -> rest | Token.IF :: rest -> rest |> else_stmt | _ -> failwith "Expected ENDIF")
-    | Token.ENDIF :: remaining -> remaining
+        |> (function
+        | ENDIF :: rest -> rest
+        | IF :: rest -> rest |> else_stmt
+        | _ -> failwith "Expected ENDIF")
+    | ENDIF :: remaining -> remaining
     | _ -> failwithf $"Invalid else statement: {xs}"
 
 //<rel_oper> ::= > | < | ==
@@ -184,37 +210,47 @@ and rel_op xs =
 //<while_stmt> ::= WHILE <cond> DO <stmt_list> DONE
 and while_stmt xs =
     match xs with
-    | Token.WHILE :: remaining -> 
-        remaining 
+    | WHILE :: remaining ->
+        remaining
         |> cond_expr
-        |> (function Token.DO :: rest -> rest | _ -> failwith "Expected DO")
-        |> stmt_list 
-        |> (function Token.DONE :: rest -> rest | _ -> failwith "Expected DONE")
-    
+        |> (function
+        | DO :: rest -> rest
+        | _ -> failwith "Expected DO")
+        |> stmt_list
+        |> (function
+        | DONE :: rest -> rest
+        | _ -> failwith "Expected DONE")
+
 
 //<do_stmt> ::= DO <stmt_list> until <cond>
 and do_stmt xs =
     match xs with
-    | Token.DO :: remaining -> remaining |> stmt_list |> (function Token.DONE :: rest -> rest | _ -> failwith "Expected DONE")
+    | DO :: remaining ->
+        remaining
+        |> stmt_list
+        |> (function
+        | DONE :: rest -> rest
+        | _ -> failwith "Expected DONE")
     | _ -> failwithf $"Invalid do statement: {xs}"
 
 //<read_stmt> ::= READ ID
-and read_stmnt lst = 
+and read_stmnt lst =
     match lst with
-    | READ :: ID _ :: xs -> xs 
+    | READ :: ID _ :: xs -> xs
     | _ -> failwithf $"Not a valid statement: {lst}" // no empty case allowed
 
 //<write_stmt> ::= WRITE <expr>
-and write_stmnt lst = 
+and write_stmnt lst =
     match lst with
-    | WRITE :: xs   -> xs |> expr
+    | WRITE :: xs -> xs |> expr
     | _ -> failwithf $"Not a valid statement: {lst}"
 
 //<io_stmt> ::= <read_stmt> | <write_stmt>
 and io_stmnt xs =
     match xs with
-    |_ -> xs |> read_stmnt |> write_stmnt
-    |_ -> failwithf $"Not a valid statement: {xs}"
+    | READ :: xs -> xs  |> read_stmnt 
+    | WRITE :: xs -> xs |> write_stmnt
+    | _ -> failwithf $"Not a valid statement: {xs}"
 
 //<arith_op> ::= - | + | * | /
 and arith_op xs =
@@ -222,8 +258,6 @@ and arith_op xs =
     | ADD :: xs -> xs
     | MULTIPLY :: xs -> xs
     | _ -> failwithf $"Invalid arithmetic operator: {xs}"
-
-
 
 
 
@@ -244,12 +278,13 @@ let main () =
     //             -> MAP the list of strings into a list of Tokens.
     //
     // (Note, though arrays are a lot like lists, lists are a bit easier to use for the pattern matching.)
-    
-    // 'mapTokens' is mainly it's own function as an example of the ">>" operator.
-    let mapTokens = Array.toList >> List.map Token.tokenFromLexeme  
 
-    // This is very ".NET" specific. Split is part of the .NET API.        
-    let getTokenList (str: string) = Regex.Split(str.Trim(), "\\s+") |> mapTokens
+    // 'mapTokens' is mainly it's own function as an example of the ">>" operator.
+    let mapTokens = Array.toList >> List.map Token.tokenFromLexeme
+
+    // This is very ".NET" specific. Split is part of the .NET API.
+    let getTokenList (str: string) =
+        Regex.Split(str.Trim(), "\\s+") |> mapTokens
 
     (* Begin Parsing Process *)
     let startParsing str =
@@ -275,15 +310,13 @@ let main () =
     // Get the user input and start parsing
     let getUserInput () =
         printf "Enter (Space Delimited) String\n=> "
-        
+
         // A case where it's easier to use the .NET ReadLine as opposed to the more restrictive OCaml native variant.
         System.Console.ReadLine()
 
     in
 
-    getUserInput () |>
-        startParsing |>
-        ignore  // Just ignore the result, as we are just printing results above.
+    getUserInput () |> startParsing |> ignore // Just ignore the result, as we are just printing results above.
 
 
 // Execute the main function!

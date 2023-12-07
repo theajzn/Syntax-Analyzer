@@ -137,8 +137,9 @@ and for_stmt lst =
 
     // All "for loops" are structured as:  "for a = b to c do ... done"
     match lst with
-        FOR :: ID a :: EQL :: ID b :: TO :: ID c :: forTail
-        -> forTail 
+        FOR :: ID a :: EQL :: ID b :: TO :: ID c :: xs
+
+        -> xs 
         |> degugDisplay $"For values: for {a} = {b} to {c}" // Example of using a separate function as part of the pipe
         |> step_stmt
         |> function
@@ -152,7 +153,9 @@ and for_stmt lst =
 
 // NOT IMPLEMENTED -- FAKE RULE:   (It just resolves to the input list, unchanged)
 // This is Just to get the program to compile since "for_stmt" uses the "step_stmt" production)
-and step_stmt x = x
+and step_stmt = function
+     | STEP :: ID :: xs -> xs
+     | x -> x 
 
 
 
