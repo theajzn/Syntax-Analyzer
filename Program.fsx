@@ -37,6 +37,7 @@ type Token =
     | WHILE
     | DO
     | DONE
+    | UNTIL
     | COND
     | PARENTH
     | ADD
@@ -65,6 +66,7 @@ type Token =
         | "while" -> WHILE
         | "do" -> DO
         | "done" -> DONE
+        | "until" -> UNTIL
         | "," -> COMMA
         | "<-" -> FUNCTION
         | x -> ID x
@@ -181,23 +183,15 @@ and if_stmt =
 //<cond_expr> ::= <expr> <rel_oper> <expr>
 and cond_expr xs =
     match xs with
-    | ID _ :: remaining -> remaining |> rel_op
-    | PARENTH :: remaining ->
-        match remaining |> expr with
-        | exprTail -> exprTail |> rel_op
-        | _ -> failwithf $"Invalid conditional expression after opening parenthesis: {remaining}"
+    | ID _ :: remaining -> remaining |> expr
+    | PARENTH :: remaining -> remaining |> expr 
+    | COND :: remaining -> remaining |> rel_op
     | _ -> failwithf $"Invalid conditional expression: {xs}"
 
 //<else_stmt> ::= ELSE <stmt_list> ENDIF | ENDIF
 and else_stmt xs =
     match xs with
-    | ELSE :: remaining ->
-        remaining
-        |> stmt_list
-        |> (function
-        | ENDIF :: rest -> rest
-        | IF :: rest -> rest |> else_stmt
-        | _ -> failwith "Expected ENDIF")
+    | ELSE :: remaining -> remaining |> stmt_list |> matchToken ENDIF 
     | ENDIF :: remaining -> remaining
     | _ -> failwithf $"Invalid else statement: {xs}"
 
@@ -207,30 +201,18 @@ and rel_op xs =
     | COND :: xs -> xs
     | _ -> failwithf $"Invalid relational operator: {xs}"
 
-//<while_stmt> ::= WHILE <cond> DO <stmt_list> DONE
+//<while_stmt> ::= WHILE <cond_expr> DO <stmt_list> DONE
 and while_stmt xs =
     match xs with
-    | WHILE :: remaining ->
-        remaining
-        |> cond_expr
-        |> (function
-        | DO :: rest -> rest
-        | _ -> failwith "Expected DO")
-        |> stmt_list
-        |> (function
-        | DONE :: rest -> rest
-        | _ -> failwith "Expected DONE")
+    | WHILE :: remaining -> remaining |> cond_expr |> matchToken DO |> stmt_list |> matchToken DONE
+    | _ -> failwith $"Invalid while statement: {xs}"
 
 
-//<do_stmt> ::= DO <stmt_list> until <cond>
+//<do_stmt> ::= DO <stmt_list> until <cond_expr>
 and do_stmt xs =
     match xs with
-    | DO :: remaining ->
-        remaining
-        |> stmt_list
-        |> (function
-        | DONE :: rest -> rest
-        | _ -> failwith "Expected DONE")
+    | DO :: remaining -> remaining |> stmt_list |> matchToken UNTIL |> cond_expr
+        
     | _ -> failwithf $"Invalid do statement: {xs}"
 
 //<read_stmt> ::= READ ID
