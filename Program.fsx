@@ -129,8 +129,11 @@ and stmt xs =
     | _ -> failwithf $"Invalid statement: {xs}"
 
 //<id_tail> ::= <fun_call> | <assignment>
-and id_tail lst = lst |> id_tail |> assignment
-
+and id_tail xs =
+    match xs with
+    | FUNCTION :: remaining -> remaining |> fun_call
+    | ASGN :: remaining -> remaining |> assignment
+    | _ ->  failwithf $"Invalid id tail: {xs}"
 
 //<assignment> ::= := <expr>
 and assignment lst =
@@ -140,38 +143,39 @@ and assignment lst =
 
 
 //<fun_call> ::= <- ID ( <param_list> )
-and fun_call lst =
-    match lst with
-    | FUNCTION :: ID _ :: PARENTH :: xs -> xs |> param_list
-    | _ -> failwithf $"Not a valid fun_call statement: {lst}"
+and fun_call xs =
+    match xs with
+    | FUNCTION :: remaining -> remaining
+    | ID _ :: remaining -> remaining
+    | PARENTH :: remaining -> remaining |> param_list |> matchToken PARENTH
+    | _ -> failwithf $"Invalid function call: {xs}"
 
 //<expr> ::= ID <expr_tail> | ( <expr> ) <expr_tail>
-and expr lst =
-    match lst with
-    | ID _ :: xs -> xs |> expr_tail
-    | PARENTH :: xs -> xs |> expr |> expr_tail
-    | _ -> failwith $"Invalid expression after opening parenthesis: {lst}"
+and expr xs =
+    match xs with
+    | ID _ :: remaining -> remaining |> expr_tail
+    | PARENTH :: remaining -> remaining |> expr |> matchToken PARENTH |> expr_tail
+    | _ -> failwithf $"Invalid expression: {xs}"
 
 
 //<expr_tail> ::= <arith_op> <expr> | ε
-and expr_tail xs =
-    match xs with
-    | ADD :: remaining -> remaining |> expr
-    | MULTIPLY :: remaining -> remaining |> expr 
-    | PARENTH :: remaining -> remaining |> expr_tail
-    | _ -> failwith $"Invalid expression after opening parenthesis: {xs}"
+and expr_tail lst =
+    match lst with
+    | (ADD | MULTIPLY) :: _ -> lst |> arith_op |> expr
+    | x -> x
+
+
 
 //<param_list> ::= <expr> <param_tail>
 and param_list xs =
-    match xs with
-    | PARENTH :: remaining -> remaining
-    | _ -> xs |> expr |> param_tail
+    xs |> expr |> param_tail
 
 //<param_tail> ::= , <expr> <param_tail> | ε
 and param_tail xs =
     match xs with
     | COMMA :: remaining -> remaining |> expr |> param_tail
-    | _ -> xs
+    | x -> x
+    
 
 //<if_stmt> ::= IF <cond> THEN <stmt_list> <else_stmt>
 and if_stmt =
