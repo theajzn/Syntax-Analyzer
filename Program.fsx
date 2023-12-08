@@ -109,7 +109,7 @@ and ``$$`` =
 //<stmt_list> ::= <stmt> <stmt_list> | ε
 and stmt_list lst =
     match lst with
-    | (READ | WRITE | IF | DO | WHILE) :: _ -> lst |> stmt |> stmt_list
+    | ( READ | WRITE | IF | DO | WHILE| ID _) :: _ -> lst |> stmt |> stmt_list
     | x -> x
 
 // and stmt lst =
@@ -131,9 +131,9 @@ and stmt xs =
 //<id_tail> ::= <fun_call> | <assignment>
 and id_tail xs =
     match xs with
-    | FUNCTION :: remaining -> remaining |> fun_call
-    | ASGN :: remaining -> remaining |> assignment
-    | _ ->  failwithf $"Invalid id tail: {xs}"
+    | Token.FUNCTION :: Token.ID _ :: Token.PARENTH :: remaining -> remaining |> param_list |> id_tail
+    | Token.ASGN :: remaining -> remaining |> expr
+    | _ -> xs
 
 //<assignment> ::= := <expr>
 and assignment lst =
@@ -143,28 +143,32 @@ and assignment lst =
 
 
 //<fun_call> ::= <- ID ( <param_list> )
+
 and fun_call xs =
     match xs with
-    | FUNCTION :: remaining -> remaining
-    | ID _ :: remaining -> remaining
-    | PARENTH :: remaining -> remaining |> param_list |> matchToken PARENTH
+    | FUNCTION :: ID _ :: PARENTH :: remaining -> remaining |> param_list |> matchToken PARENTH
     | _ -> failwithf $"Invalid function call: {xs}"
 
+    
 //<expr> ::= ID <expr_tail> | ( <expr> ) <expr_tail>
 and expr xs =
     match xs with
-    | ID _ :: remaining -> remaining |> expr_tail
-    | PARENTH :: remaining -> remaining |> expr |> matchToken PARENTH |> expr_tail
+    | Token.ID _ :: remaining -> remaining |> expr_tail
+    | Token.PARENTH :: remaining ->
+        match remaining |> expr with
+        | exprTail -> exprTail
+        
     | _ -> failwithf $"Invalid expression: {xs}"
 
-
 //<expr_tail> ::= <arith_op> <expr> | ε
-and expr_tail lst =
-    match lst with
-    | (ADD | MULTIPLY) :: _ -> lst |> arith_op |> expr
-    | x -> x
-
-
+and expr_tail xs =
+    match xs with
+    | Token.ADD :: remaining | Token.MULTIPLY :: remaining ->
+        match remaining |> expr with
+        | exprTail -> exprTail |> expr_tail
+        
+    | Token.PARENTH :: remaining -> remaining |> expr_tail
+    | _ -> xs
 
 //<param_list> ::= <expr> <param_tail>
 and param_list xs =
